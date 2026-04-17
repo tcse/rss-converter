@@ -24,7 +24,7 @@
 > ✨ **Живой пример:**
 > `https://ваш-сайт.ru/plugins/tcse/rss-converter/youtube.php?action=channel&id=UC******&format=rss`
 
-[Подробная инструкция с картинками и кнопками «копировать» находится здесь.](https://github.com/tcse/rss-converter/blob/main/plugins/tcse/rss-converter/index.html)
+[Подробная инструкция с картинками и кнопками «копировать» находится здесь.]([https://github.com/tcse/rss-converter/blob/main/plugins/tcse/rss-converter/index.html](https://online.tcse-cms.com/demo/rss-converter/index.html))
 
 ---
 
