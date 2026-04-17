@@ -145,8 +145,8 @@ function fetchViaProxy($url, $config) {
     $proxyConfig = $config['proxy'];
     
     if ($proxyConfig['enabled']) {
-        // Используем новый Worker ru.chuyakov.workers.dev
-        $proxyUrl = 'https://ru.chuyakov.workers.dev';
+        // Используем новый Worker ru.site-name.workers.dev
+        $proxyUrl = 'https://ru.site-name.workers.dev';
         $proxyToken = $proxyConfig['token'];
         
         // Формируем URL для универсального прокси
