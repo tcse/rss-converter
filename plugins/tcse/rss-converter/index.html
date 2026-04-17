@@ -1,0 +1,476 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS Converter — YouTube → RSS/JSON через Cloudflare Worker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f5f7fb;
+            color: #1a1a2e;
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #0f172a;
+        }
+        h2 {
+            font-size: 1.5rem;
+            margin: 1.5rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e2e8f0;
+            color: #1e293b;
+        }
+        h3 {
+            font-size: 1.25rem;
+            margin: 1.25rem 0 0.75rem;
+            color: #334155;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+        }
+        .badge {
+            display: inline-block;
+            background: #e2e8f0;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #475569;
+            margin-right: 8px;
+        }
+        .badge-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .badge-warning {
+            background: #fed7aa;
+            color: #9a3412;
+        }
+        .url-box {
+            background: #f1f5f9;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.85rem;
+            word-break: break-all;
+            margin: 12px 0;
+            border: 1px solid #e2e8f0;
+        }
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+        }
+        .param-table th, .param-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .param-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+        }
+        .param-table td:first-child {
+            font-family: monospace;
+            font-weight: 600;
+            color: #2563eb;
+        }
+        .copy-btn {
+            background: #e2e8f0;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-left: 12px;
+        }
+        .copy-btn:hover {
+            background: #cbd5e1;
+        }
+        .code-block {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 12px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+        .note {
+            background: #fef9c3;
+            border-left: 4px solid #eab308;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+        .success {
+            background: #dcfce7;
+            border-left: 4px solid #22c55e;
+        }
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 20px 12px;
+            }
+            .card {
+                padding: 16px;
+            }
+            .param-table th, .param-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📡 RSS Converter</h1>
+    <p style="color: #475569; margin-bottom: 24px;">Конвертер YouTube → RSS/JSON через Cloudflare Worker для обхода блокировок</p>
+
+    <!-- Статус -->
+    <div class="card" style="background: #f0fdf4; border-color: #bbf7d0;">
+        <span class="badge badge-success">✅ Работает</span>
+        <span class="badge">Версия 1.0</span>
+        <span class="badge">YouTube</span>
+        <p style="margin-top: 12px;">Прокси через Cloudflare Worker успешно настроен. Каналы и плейлисты YouTube доступны в форматах <strong>RSS</strong> и <strong>JSON</strong>.</p>
+    </div>
+
+    <!-- ===== ИНСТРУКЦИЯ ПО НАСТРОЙКЕ WORKER ===== -->
+    <h2>🛠 1. Настройка Cloudflare Worker</h2>
+    <div class="card">
+        <h3>Шаг 1: Создайте Worker</h3>
+        <p>Войдите в <a href="https://dash.cloudflare.com" target="_blank">Cloudflare Dashboard</a> → <strong>Workers & Pages</strong> → <strong>Create Worker</strong>.</p>
+        <p>Назовите Worker, например: <code>ru</code> (для поддомена <code>ru.site-name.workers.dev</code>).</p>
+
+        <h3>Шаг 2: Добавьте переменную окружения</h3>
+        <p>В настройках Worker перейдите в <strong>Settings → Variables → Environment Variables</strong> и нажмите <strong>Add variable</strong>:</p>
+        
+        <table class="param-table" style="max-width: 500px;">
+            <tr style="background: #f8fafc;"><th>Type</th><th>Name</th><th>Value</th></tr>
+            <tr><td><span class="badge">Secret</span></td><td><code>PROXY_TOKEN</code></td><td><code>ваш_секретный_токен</code></td></tr>
+        </table>
+        <div class="note">
+            ⚠️ <strong>Важно:</strong> Тип должен быть <strong>Secret</strong>, а имя — строго <strong>PROXY_TOKEN</strong>. Токен придумайте сложный и сохраните — он понадобится в конфиге PHP.
+        </div>
+
+        <h3>Шаг 3: Вставьте код Worker</h3>
+        <div class="code-block">
+// Universal HTTP Proxy Worker
+// Проксирует запросы к любым URL, переданным через параметр 'url'
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method;
+
+    // Токен для авторизации (из переменных окружения)
+    const PROXY_TOKEN = env.PROXY_TOKEN;
+    
+    // Проверяем авторизацию
+    const authToken = url.searchParams.get('token') || 
+                      request.headers.get('X-Auth-Token');
+    
+    if (authToken !== PROXY_TOKEN) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    // === НОВЫЙ РЕЖИМ: универсальное прокси для любых URL ===
+    // Использование: ?url=https://example.com&token=xxx
+    const targetUrl = url.searchParams.get('url');
+    
+    if (targetUrl) {
+      try {
+        // Декодируем URL
+        const decodedUrl = decodeURIComponent(targetUrl);
+        
+        // Проверяем, что URL безопасен (только http/https)
+        if (!decodedUrl.startsWith('http://') && !decodedUrl.startsWith('https://')) {
+          return new Response('Bad Request: Invalid URL protocol', { status: 400 });
+        }
+        
+        // Запрещаем доступ к внутренним ресурсам Cloudflare
+        const blockedDomains = ['cloudflare.com', 'workers.dev', '.local'];
+        for (const domain of blockedDomains) {
+          if (decodedUrl.includes(domain)) {
+            return new Response('Forbidden: Access to this domain is not allowed', { status: 403 });
+          }
+        }
+        
+        // Выполняем запрос к целевой странице
+        const response = await fetch(decodedUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; RSS-Converter/1.0; +https://chuyakov.ru)',
+            'Accept': 'application/xml, application/rss+xml, application/json, text/html, */*'
+          }
+        });
+        
+        // Получаем содержимое ответа
+        const responseBody = await response.arrayBuffer();
+        
+        // Определяем Content-Type для ответа
+        let contentType = response.headers.get('Content-Type') || 'application/octet-stream';
+        
+        // Для RSS и XML устанавливаем правильный тип
+        if (decodedUrl.includes('.xml') || decodedUrl.includes('feeds/videos.xml')) {
+          contentType = 'application/rss+xml; charset=utf-8';
+        }
+        
+        // Возвращаем ответ с CORS-заголовками
+        return new Response(responseBody, {
+          status: response.status,
+          headers: {
+            'Content-Type': contentType,
+            'Access-Control-Allow-Origin': '*',
+            'X-Proxied-By': 'Cloudflare-Worker',
+            'Cache-Control': 'public, max-age=3600'
+          }
+        });
+        
+      } catch (error) {
+        return new Response(JSON.stringify({
+          error: 'Proxy error',
+          message: error.message
+        }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
+      }
+    }
+    
+    // === РЕЖИМ TELEGRAM (для обратной совместимости) ===
+    let telegramUrl;
+    
+    if (path.startsWith('/bot')) {
+      telegramUrl = `https://api.telegram.org${path}`;
+    } 
+    else if (path.startsWith('/file/bot')) {
+      telegramUrl = `https://api.telegram.org${path}`;
+    }
+    else {
+      // Если нет ни url, ни пути Telegram — возвращаем инструкцию
+      return new Response(JSON.stringify({
+        message: 'Universal HTTP Proxy is running',
+        usage: 'Use ?url=https://example.com&token=YOUR_TOKEN to proxy any URL',
+        telegram: 'Use /bot or /file/bot paths for Telegram API'
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
+
+    // Обработка Telegram API (как было раньше)
+    const searchParams = url.searchParams;
+    searchParams.delete('token');
+    const queryString = searchParams.toString();
+    const fullUrl = telegramUrl + (queryString ? `?${queryString}` : '');
+
+    const headers = new Headers(request.headers);
+    headers.delete('host');
+    headers.delete('x-auth-token');
+
+    const fetchOptions = {
+      method: method,
+      headers: headers,
+    };
+
+    if (method !== 'GET' && method !== 'HEAD') {
+      fetchOptions.body = request.body;
+    }
+
+    try {
+      const response = await fetch(fullUrl, fetchOptions);
+      
+      const responseHeaders = new Headers(response.headers);
+      responseHeaders.set('Access-Control-Allow-Origin', '*');
+      responseHeaders.set('X-Proxied-By', 'Cloudflare-Worker');
+      
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders
+      });
+      
+    } catch (error) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error_code: 500,
+        description: 'Proxy error: ' + error.message
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
+  }
+};
+        </div>
+        <p>Нажмите <strong>Save and Deploy</strong>.</p>
+        <p>Ваш Worker будет доступен по адресу: <code>https://ru.site-name.workers.dev</code></p>
+    </div>
+
+    <!-- ===== НАСТРОЙКА PHP-СКРИПТА ===== -->
+    <h2>📁 2. Настройка PHP-скрипта</h2>
+    <div class="card">
+        <h3>Файл: <code>/plugins/tcse/rss-converter/config.php</code></h3>
+        <div class="code-block">
+&lt;?php
+return [
+    'proxy' => [
+        'enabled' => true,
+        'url' => 'https://ru.site-name.workers.dev',
+        'token' => 'ВАШ_СЕКРЕТНЫЙ_ТОКЕН'  // Тот же, что в PROXY_TOKEN
+    ],
+    'cache' => [
+        'enabled' => true,
+        'dir' => __DIR__ . '/cache',
+        'ttl' => 3600  // 1 час
+    ]
+];
+        </div>
+        <div class="note">
+            💡 Убедитесь, что папка <code>/cache</code> существует и доступна для записи (chmod 755 или 777).
+        </div>
+    </div>
+
+    <!-- ===== ДОСТУПНЫЕ ССЫЛКИ ===== -->
+    <h2>🔗 3. Доступные ссылки</h2>
+    <div class="card">
+        <p><strong>Базовый URL:</strong> <code>https://site-name.ru/plugins/tcse/rss-converter/youtube.php</code></p>
+        
+        <h3>📺 По ID канала (YouTube Channel ID)</h3>
+        <div class="url-box">
+            <code id="channel-url">https://site-name.ru/plugins/tcse/rss-converter/youtube.php?action=channel&id=UCFaU3eGiIdpdNSCuReqoFSA&format=rss</code>
+            <button class="copy-btn" onclick="copyToClipboard('channel-url')">📋 Копировать</button>
+        </div>
+        <p><strong>JSON формат:</strong> замените <code>format=rss</code> на <code>format=json</code></p>
+
+        <h3>🎵 По ID плейлиста (YouTube Playlist ID)</h3>
+        <div class="url-box">
+            <code id="playlist-url">https://site-name.ru/plugins/tcse/rss-converter/youtube.php?action=playlist&id=PLUfT3oHVGZjolj76pX-cq9UpXY5uMu_yz&format=rss</code>
+            <button class="copy-btn" onclick="copyToClipboard('playlist-url')">📋 Копировать</button>
+        </div>
+
+        <h3>👤 По имени пользователя (YouTube Username)</h3>
+        <div class="url-box">
+            <code id="user-url">https://site-name.ru/plugins/tcse/rss-converter/youtube.php?action=user&name=Vitalysite-name&format=rss</code>
+            <button class="copy-btn" onclick="copyToClipboard('user-url')">📋 Копировать</button>
+        </div>
+
+        <h3>📊 Параметры запроса</h3>
+        <table class="param-table">
+            <tr><th>Параметр</th><th>Значения</th><th>Описание</th></tr>
+            <tr><td>action</td><td>channel / playlist / user</td><td>Тип источника</td></tr>
+            <tr><td>id</td><td>Channel ID или Playlist ID</td><td>Для channel и playlist</td></tr>
+            <tr><td>name</td><td>Username</td><td>Для user</td></tr>
+            <tr><td>format</td><td>rss / json</td><td>Формат вывода (по умолчанию rss)</td></tr>
+        </table>
+    </div>
+
+    <!-- ===== ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ ===== -->
+    <h2>📖 4. Примеры использования</h2>
+    <div class="card">
+        <h3>В RSS-ридере (Feedly, Inoreader, RSSOwl и др.)</h3>
+        <p>Просто добавьте ссылку на RSS-ленту в ваш ридер. Картинки отображаются автоматически.</p>
+        
+        <h3>В Telegram боте</h3>
+        <div class="code-block">
+# Отправка последних видео из канала в Telegram
+https://api.telegram.org/bot&lt;TOKEN&gt;/sendMessage?chat_id=@site-name_project&text=📺 Новое видео: https://site-name.ru/plugins/tcse/rss-converter/youtube.php?action=channel&id=UCFaU3eGiIdpdNSCuReqoFSA&format=rss
+        </div>
+
+        <h3>На сайте (виджет)</h3>
+        <div class="code-block">
+&lt;!-- Вставка RSS-ленты через JavaScript (например, с помощью rss2html) --&gt;
+&lt;script src="https://cdn.jsdelivr.net/npm/rss2html/dist/rss2html.min.js"&gt;&lt;/script&gt;
+&lt;div id="youtube-feed"&gt;&lt;/div&gt;
+&lt;script&gt;
+  rss2html('https://site-name.ru/plugins/tcse/rss-converter/youtube.php?action=channel&id=UCFaU3eGiIdpdNSCuReqoFSA&format=rss', {
+    target: '#youtube-feed',
+    limit: 5
+  });
+&lt;/script&gt;
+        </div>
+    </div>
+
+    <!-- ===== НЮАНСЫ ===== -->
+    <h2>⚠️ 5. Важные нюансы</h2>
+    <div class="card">
+        <ul style="margin-left: 20px;">
+            <li><strong>Кеширование:</strong> Данные кешируются на 1 час. При добавлении новых видео в YouTube подождите до 60 минут или очистите папку <code>/cache/</code>.</li>
+            <li><strong>Не все плейлисты доступны:</strong> YouTube может не отдавать RSS для приватных, скрытых или автоматически сгенерированных плейлистов (например, "Музыка", "Мне понравилось").</li>
+            <li><strong>Channel ID можно найти:</strong> на странице канала → просмотр кода страницы → поиск <code>"channelId":"UC..."</code>.</li>
+            <li><strong>Playlist ID:</strong> в URL плейлиста после <code>list=</code>, например: <code>PLUfT3oHVGZjolj76pX-cq9UpXY5uMu_yz</code>.</li>
+            <li><strong>Лимиты Worker:</strong> Бесплатный тариф Cloudflare — 100 000 запросов в день. Для среднего сайта достаточно.</li>
+            <li><strong>Картинки в RSS:</strong> Добавлены в <code>&lt;description&gt;</code> как кликабельные ссылки — работают во всех RSS-ридерах.</li>
+        </ul>
+    </div>
+
+    <!-- ===== ПРОВЕРКА РАБОТЫ ===== -->
+    <h2>🧪 6. Проверка работы</h2>
+    <div class="card">
+        <p>Откройте в браузере одну из ссылок:</p>
+        <ul style="margin-left: 20px;">
+            <li><a href="https://site-name.ru/plugins/tcse/rss-converter/youtube.php?action=channel&id=UCFaU3eGiIdpdNSCuReqoFSA&format=rss" target="_blank">📺 RSS канала (должен открыться XML)</a></li>
+            <li><a href="https://site-name.ru/plugins/tcse/rss-converter/youtube.php?action=channel&id=UCFaU3eGiIdpdNSCuReqoFSA&format=json" target="_blank">📊 JSON канала (должен открыться JSON)</a></li>
+            <li><a href="https://site-name.ru/plugins/tcse/rss-converter/youtube.php?action=playlist&id=PLUfT3oHVGZjolj76pX-cq9UpXY5uMu_yz&format=rss" target="_blank">🎵 RSS плейлиста (должен открыться XML)</a></li>
+        </ul>
+        <div class="note success">
+            ✅ Если видите XML или JSON — всё работает. Если ошибка — проверьте настройки прокси и токены.
+        </div>
+    </div>
+
+    <footer>
+        📡 RSS Converter &nbsp;|&nbsp; <a href="https://tcse-cms.com" target="_blank">TCSE-CMS</a> &nbsp;|&nbsp; Работает через Cloudflare Worker<br>
+        Версия 1.0 | YouTube → RSS/JSON | Обход блокировок РКН
+    </footer>
+</div>
+
+<script>
+function copyToClipboard(elementId) {
+    const text = document.getElementById(elementId).innerText;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target;
+        const originalText = btn.innerText;
+        btn.innerText = '✅ Скопировано!';
+        setTimeout(() => btn.innerText = originalText, 1500);
+    });
+}
+</script>
+</body>
+</html>
